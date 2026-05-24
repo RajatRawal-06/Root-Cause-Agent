@@ -1,4 +1,4 @@
-# AI Incident Root Cause Analyzer 🚀
+# AI Incident Root Cause Analyzer 
 
 Welcome to the **Root-Cause-Agent** repository!
 
