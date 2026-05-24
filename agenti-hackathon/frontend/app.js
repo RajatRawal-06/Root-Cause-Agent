@@ -58,7 +58,7 @@ async function refresh() {
   state.loading = true;
   render();
   try {
-    const payload = await api("/api/incidents");
+    const payload = await api(`/api/incidents?_t=${Date.now()}`);
     applySnapshot(payload);
     setNotice("Incident data refreshed.");
   } catch (error) {
@@ -352,28 +352,36 @@ function renderDetailAndAgents() {
   `;
 
   // Attach event listeners
-  document.querySelector("#investigateBtn").addEventListener("click", async () => {
+  const investigateBtn = document.querySelector("#investigateBtn");
+  investigateBtn.addEventListener("click", async () => {
+    const originalText = investigateBtn.textContent;
+    investigateBtn.disabled = true;
+    investigateBtn.textContent = "Investigating...";
     try {
       setNotice("Investigation running.");
       const updated = await api(`/api/incidents/${incident.id}/investigate`, { method: "POST" });
+      const idx = state.incidents.findIndex((item) => item.id === updated.id);
+      if (idx !== -1) {
+        state.incidents[idx] = updated;
+      }
       state.selectedId = updated.id;
-      await refresh();
+      render();
       setNotice("Investigation completed with RCA evidence.", "success");
     } catch (error) {
       setNotice(error.message, "error");
+      investigateBtn.disabled = false;
+      investigateBtn.textContent = originalText;
     }
   });
 
   document.querySelectorAll(".apply-btn").forEach((button) => {
     button.addEventListener("click", async () => {
       const recommendation = incident.recommendations.find((item) => item.id === button.dataset.rec);
-      const confirmed = window.confirm(`Record simulated remediation for "${recommendation?.title || "this action"}"? No infrastructure command will be executed.`);
-      if (!confirmed) {
-        return;
-      }
+      button.disabled = true;
+      button.textContent = "Applying...";
       try {
         const idempotencyKey = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
-        await api("/api/remediate", {
+        const updated = await api("/api/remediate", {
           method: "POST",
           body: JSON.stringify({
             incident_id: incident.id,
@@ -381,10 +389,54 @@ function renderDetailAndAgents() {
             idempotency_key: idempotencyKey,
           }),
         });
-        await refresh();
+        const idx = state.incidents.findIndex((item) => item.id === updated.id);
+        if (idx !== -1) {
+          state.incidents[idx] = updated;
+        }
+        render();
         setNotice("Remediation simulation recorded in the audit log.", "success");
+
+        // Show success modal
+        const modal = document.getElementById("successModal");
+        const title = document.getElementById("successTitle");
+        const message = document.getElementById("successMessage");
+        const details = document.getElementById("successDetails");
+        const closeBtn = document.getElementById("successCloseBtn");
+
+        title.textContent = "Remediation Applied Successfully";
+        message.textContent = "The simulated remediation has been safely recorded in the audit log.";
+        details.innerHTML = `
+          <strong>${escapeHtml(recommendation?.title || "Remediation")}</strong>
+          <span style="color:var(--success);font-weight:600;">✓ Risk: ${escapeHtml(recommendation?.risk || "low")} · Safety: ${Math.round((recommendation?.safety_score || 0) * 100)}%</span>
+          <code>${escapeHtml(recommendation?.command || "")}</code>
+        `;
+
+        // Reset animations by re-inserting SVG content
+        const iconRing = modal.querySelector(".success-icon-ring");
+        iconRing.innerHTML = `
+          <svg class="success-checkmark" viewBox="0 0 52 52">
+            <circle class="success-circle" cx="26" cy="26" r="24" fill="none"/>
+            <path class="success-check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8"/>
+          </svg>
+        `;
+
+        modal.classList.remove("closing");
+        modal.style.display = "flex";
+
+        const closeModal = () => {
+          modal.classList.add("closing");
+          setTimeout(() => {
+            modal.style.display = "none";
+            modal.classList.remove("closing");
+          }, 250);
+        };
+
+        closeBtn.onclick = closeModal;
+        modal.onclick = (e) => { if (e.target === modal) closeModal(); };
       } catch (error) {
         setNotice(error.message, "error");
+        button.disabled = false;
+        button.textContent = recommendation.applied ? "Applied" : "Apply";
       }
     });
   });

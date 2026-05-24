@@ -106,7 +106,7 @@ def build_seed_incidents() -> list[Incident]:
             title="Redis memory saturation in cache cluster",
             service="cache-service",
             severity="P3",
-            status="mitigated",
+            status="open",
             started_at="2026-05-24T04:12:00+00:00",
             region="us-east-1",
             team="platform",
@@ -198,7 +198,7 @@ def build_seed_incidents() -> list[Incident]:
                     command="redis-cli config set maxmemory 4gb",
                     risk="low",
                     rationale="Instantly resolves eviction blockages and OOM states by expanding capacity.",
-                    applied=True,
+                    applied=False,
                     safety_score=0.95,
                     expected_impact={
                         "eviction_failures": "100% reduction",
@@ -221,17 +221,8 @@ def build_seed_incidents() -> list[Incident]:
                 "2026-05-24T04:08:10+00:00 - prometheus reported metric signal for cache-service",
                 "2026-05-24T04:10:00+00:00 - loki reported log signal for cache-service",
             ],
-            audit_log=[
-                RemediationAudit(
-                    recommendation_id="inc-2026-0524-003-rec-scale",
-                    title="Dynamically expand cache memory limit",
-                    command="redis-cli config set maxmemory 4gb",
-                    applied_at="2026-05-24T04:22:00+00:00",
-                    result="Simulated remediation accepted and recorded. Cache memory ceiling expanded to 4GB.",
-                    idempotency_key="demo-key-redis-scale",
-                )
-            ],
-            resolved_at="2026-05-24T04:22:00+00:00",
+            audit_log=[],
+            resolved_at=None,
         ),
     ]
 

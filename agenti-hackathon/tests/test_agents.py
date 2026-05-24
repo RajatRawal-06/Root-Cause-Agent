@@ -32,7 +32,7 @@ class InvestigationPipelineTest(unittest.TestCase):
 
     def test_remediation_is_audited_without_losing_incident(self) -> None:
         incident = InvestigationPipeline().run(build_seed_incidents()[0])
-        with TemporaryDirectory(dir=TEST_DATA) as directory:
+        with TemporaryDirectory(dir=TEST_DATA, ignore_cleanup_errors=True) as directory:
             store = IncidentStore([incident], db_path=f"{directory}/incidents.db")
             recommendation_id = incident.recommendations[0].id
 
