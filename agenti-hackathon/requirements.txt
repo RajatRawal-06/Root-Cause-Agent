@@ -1,0 +1,8 @@
+# Runtime dependency posture:
+# The current implementation is intentionally Python-stdlib only so the demo can
+# run in constrained hackathon environments without network installs.
+#
+# Recommended production migration path:
+# fastapi>=0.115
+# uvicorn[standard]>=0.30
+# pydantic>=2.8

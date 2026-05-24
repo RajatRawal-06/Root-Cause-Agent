@@ -1,0 +1,18 @@
+services:
+  incident-rca:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      PORT: "8000"
+      INCIDENT_DB_PATH: /app/data/incidents.db
+    volumes:
+      - incident_rca_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health'))['status'])"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  incident_rca_data:

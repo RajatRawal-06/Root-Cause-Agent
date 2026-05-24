@@ -1,0 +1,269 @@
+# System Architecture Documentation
+## AI-Powered Incident Root Cause Analyzer for SRE Teams
+
+### 1. Introduction
+This document defines the distributed multi-agent system architecture for the **AI Incident Root Cause Analyzer**. The system autonomously investigates SRE incidents by correlating logs, metrics, traces, and deployment events using an event-driven microservices architecture optimized for scalability, fault tolerance, and low-latency AI orchestration.
+
+### 2. High-Level Architecture Diagram
+
+```mermaid
+graph TD
+    subgraph Monitoring Layer
+        A[Grafana] -->|Webhooks| B(Data Ingestion Layer)
+        C[Datadog] -->|API Polling| B
+        D[Prometheus] -->|PushGateway| B
+        E[Kubernetes] -->|API Watch| B
+    end
+
+    subgraph Streaming Layer
+        B --> F[Kafka Cluster]
+        F -->|metrics-topic| G[Metrics Agent]
+        F -->|logs-topic| H[Logs Agent]
+        F -->|traces-topic| I[Trace Agent]
+        F -->|deploy-topic| J[Deployment Agent]
+        F -->|incidents-topic| K[Alert Intake Agent]
+    end
+
+    subgraph Multi-Agent Intelligence Layer
+        G & H & I & J --> L[Correlation Engine Agent]
+        L --> M[RCA Agent]
+        M --> N[Recommendation Agent]
+        N --> O[Dashboard Sync Agent]
+        M --> P[Alerting Agent]
+    end
+
+    subgraph Persistence Layer
+        L --> Q[(PostgreSQL)]
+        M --> R[(Pinecone/Weaviate)]
+        G & H & I --> S[(Redis Cache)]
+    end
+
+    subgraph Presentation Layer
+        O --> T[Grafana Dashboard]
+        O --> U[Next.js Frontend]
+        P --> V[Slack/PagerDuty]
+    end
+```
+
+### 3. Core Architectural Principles
+
+| Principle | Implementation Strategy |
+|-----------|------------------------|
+| **Event-Driven Processing** | Asynchronous Kafka streaming decouples all agents |
+| **Modular Agent Architecture** | Each agent has single responsibility (SRP) |
+| **Cloud-Native** | All services containerized (Docker) + Kubernetes orchestration |
+| **Explainable AI** | All RCA outputs include evidence chains + confidence scores |
+| **Horizontal Scalability** | Stateless agents + Kubernetes HPA autoscaling |
+| **Observability First** | Every agent emits metrics/traces to Prometheus/Jaeger |
+
+### 4. System Components Deep Dive
+
+#### 4.1 Monitoring Integration Layer
+**Responsibilities:**
+- Connect to Grafana, Datadog, Prometheus, Kubernetes APIs
+- Normalize telemetry into unified schema
+- Handle webhook ingestion and API polling
+
+**Key Interfaces:**
+```python
+# Unified Telemetry Schema
+{
+  "timestamp": "ISO8601",
+  "source": "grafana|datadog|prometheus|k8s",
+  "metric_type": "log|metric|trace|deployment",
+  "service_name": str,
+  "severity": "critical|warning|info",
+  "payload": dict,
+  "tags": {"env": str, "region": str, "team": str}
+}
+```
+
+#### 4.2 Event Streaming Layer (Kafka)
+**Topic Architecture:**
+
+| Topic Name | Producer | Consumer | Purpose |
+|------------|----------|----------|---------|
+| `metrics-topic` | Prometheus Collector | Metrics Agent | CPU/memory/latency streams |
+| `logs-topic` | Loki/ELK | Logs Agent | Log aggregation & parsing |
+| `traces-topic` | Jaeger/Tempo | Trace Agent | Distributed trace analysis |
+| `deploy-topic` | ArgoCD/GitHub | Deployment Agent | Release event tracking |
+| `incidents-topic` | Alert Intake Agent | All Investigation Agents | Incident coordination |
+| `rca-results` | RCA Agent | Recommendation Agent | Root cause hypotheses |
+| `actions-topic` | Recommendation Agent | Dashboard/Alerting Agents | Remediation commands |
+
+#### 4.3 Multi-Agent Intelligence Layer
+
+##### **Alert Intake Agent**
+- **Trigger:** Incoming alerts from monitoring systems
+- **Logic:** 
+  - Classify severity (P0-P4)
+  - Deduplicate similar alerts (5-min window)
+  - Emit `incident investigation` event
+- **Tech:** FastAPI + LangChain
+
+##### **Logs Intelligence Agent**
+- **Input:** `logs-topic` Kafka stream
+- **AI Capabilities:**
+  - Semantic log clustering (vector embeddings)
+  - Anomaly pattern detection
+  - Error signature extraction
+- **Output:** Log anomaly summary + top 5 error patterns
+
+##### **Metrics Analysis Agent**
+- **Input:** `metrics-topic` + Prometheus queries
+- **AI Capabilities:**
+  - Statistical anomaly detection (Z-score, Isolation Forest)
+  - Baseline comparison (7-day rolling window)
+  - Trend forecasting (Prophet/ARIMA)
+- **Metrics Monitored:** CPU, memory, latency, error rate, traffic
+
+##### **Distributed Trace Agent**
+- **Input:** `traces-topic` + Jaeger/Tempo APIs
+- **AI Capabilities:**
+  - Service bottleneck identification
+  - Latency propagation tracing
+  - Span failure correlation
+- **Output:** Critical path analysis + slowest service chain
+
+##### **Deployment Analysis Agent**
+- **Input:** `deploy-topic` + GitHub/ArgoCD APIs
+- **Logic:**
+  - Track deployment metadata (commit, author, image tag)
+  - Correlate deployment time with incident start time
+  - Detect config changes (ConfigMap/Secret diffs)
+- **Output:** Deployment-incident correlation score
+
+##### **Correlation Engine Agent**
+- **Input:** Outputs from Logs/Metrics/Trace/Deployment agents
+- **AI Capabilities:**
+  - Causal graph construction
+  - Timeline reconstruction (chronological event ordering)
+  - Temporal correlation (events within Δt=5min window)
+- **Output:** Incident context graph (JSON + GraphML)
+
+##### **Root Cause Analysis (RCA) Agent**
+- **Input:** Correlation graph + incident context
+- **AI Techniques:**
+  - Graph reasoning (LangGraph state machine)
+  - Causal inference (Do-calculus)
+  - Incident similarity matching (vector search in Pinecone)
+  - LLM hypothesis generation + verification
+- **Output Schema:**
+```json
+{
+  "incident_id": "inc-2026-0524-001",
+  "root_causes": [
+    {
+      "hypothesis": "Database connection pool exhaustion after deployment v2.4",
+      "confidence": 0.94,
+      "evidence": [
+        "CPU spike on db-primary at 10:03:12",
+        "Query timeout errors increased 300%",
+        "Deployment v2.4 at 10:01:00 changed connection pool size"
+      ],
+      "affected_services": ["api-gateway", "user-service"]
+    }
+  ]
+}
+```
+
+##### **Recommendation Agent**
+- **Input:** RCA output + historical incident playbook
+- **Logic:**
+  - Match root cause to remediation patterns
+  - Generate step-by-step runbook
+  - Suggest rollback if confidence > 85%
+- **Output Examples:**
+  - `kubectl rollout undo deployment/api-gateway`
+  - `Increase DB connection pool from 50 → 100`
+  - `Scale API replicas from 3 → 6`
+
+##### **Dashboard Sync Agent**
+- **Responsibilities:**
+  - Push incident annotations to Grafana
+  - Create temporary RCA panels
+  - Update Datadog monitor status
+  - Sync incident timeline to frontend WebSocket
+
+##### **Alerting Agent**
+- **Channels:** Slack, PagerDuty, Email, Teams
+- **Logic:**
+  - P0/P1 → Immediate PagerDuty + Slack #incidents-critical
+  - P2/P3 → Slack #incidents-warning + email digest
+  - Include RCA summary + recommendation link
+
+#### 4.4 Persistence Layer
+
+| Component | Purpose | Technology |
+|-----------|---------|------------|
+| **Incident Store** | Incident history, RCA reports | PostgreSQL |
+| **Vector Memory** | Historical incident similarity search | Pinecone/Weaviate |
+| **Cache** | Real-time agent state, session data | Redis |
+| **Telemetry Metadata** | Raw log/metric/trace references | S3 + Loki index |
+
+### 5. End-to-End Workflow
+
+```mermaid
+sequenceDiagram
+    participant Monitoring as Grafana/Datadog
+    participant AlertAgent as Alert Intake Agent
+    participant Kafka as Kafka Cluster
+    participant Logs as Logs Agent
+    participant Metrics as Metrics Agent
+    participant Trace as Trace Agent
+    participant Deploy as Deployment Agent
+    participant Corr as Correlation Agent
+    participant RCA as RCA Agent
+    participant Rec as Recommendation Agent
+    participant Dash as Dashboard Agent
+
+    Monitoring->>Kafka: Post alert webhook
+    Kafka->>AlertAgent: Consume incidents-topic
+    AlertAgent->>Kafka: Publish investigation-event
+    Kafka->>Logs: Consume logs-topic
+    Kafka->>Metrics: Consume metrics-topic
+    Kafka->>Trace: Consume traces-topic
+    Kafka->>Deploy: Consume deploy-topic
+    Logs->>Corr: Post log-anomaly
+    Metrics->>Corr: Post metric-anomaly
+    Trace->>Corr: Post trace-bottleneck
+    Deploy->>Corr: Post deploy-event
+    Corr->>Corr: Build incident timeline
+    Corr->>RCA: Send correlation-graph
+    RCA->>RCA: Generate hypotheses
+    RCA->>Kafka: Post rca-results
+    Kafka->>Rec: Consume rca-results
+    Rec->>Rec: Generate remediation plan
+    Rec->>Kafka: Post actions-topic
+    Kafka->>Dash: Consume actions-topic
+    Dash->>Dash: Update Grafana + Frontend
+    Dash->>Monitoring: Post incident annotation
+```
+
+### 6. Security Architecture
+
+| Layer | Security Control |
+|-------|-----------------|
+| **Authentication** | OAuth2 + JWT tokens for API access |
+| **Authorization** | RBAC (Role-Based Access Control) + namespace isolation |
+| **Data Encryption** | TLS 1.3 for all internode communication |
+| **Secrets Management** | HashiCorp Vault / Kubernetes Secrets |
+| **Network Security** | Kubernetes Network Policies + mTLS |
+
+### 7. Scalability Strategy
+
+- **Horizontal Pod Autoscaler (HPA):** Scale agents based on Kafka lag
+- **Kafka Partitioning:** 12 partitions per topic for parallel processing
+- **Stateless Design:** All agents store state in Redis/PostgreSQL
+- **Circuit Breakers:** Implement resilience4j for external API calls
+- **Dead Letter Queues:** Failed messages routed to DLQ for replay
+
+### 8. Future Expansion Roadmap
+
+| Phase | Feature |
+|-------|---------|
+| **Phase 4** | AI-generated auto-remediation (safe actions only) |
+| **Phase 5** | Predictive outage prevention (time-series forecasting) |
+| **Phase 6** | Reinforcement learning for recommendation optimization |
+| **Phase 7** | Multi-cloud monitoring (AWS + GCP + Azure) |
+| **Phase 8** | AI-driven incident simulation (chaos engineering) |
