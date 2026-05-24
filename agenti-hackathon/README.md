@@ -16,6 +16,10 @@ The system automatically correlates logs, metrics, traces, and deployment signal
 ### 2. Root Cause Analysis (RCA)
 ![Root Cause Analysis Detail](assets/rca.png)
 
+### FlowChart(Multi agents Architecture)
+![alt text](image.png)
+
+
 *This view shows the AI-driven confidence scores and the evidence chain connecting logs and metrics. The **Remediate** button allows triggering an idempotent remediation sequence.*
 
 ---
